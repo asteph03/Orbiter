@@ -10,6 +10,7 @@
 
 #include <JuceHeader.h>
 #include "GrainProcessor.h"
+#include "AudioVisualizer.h"
 
 //==============================================================================
 /**
@@ -57,12 +58,12 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
-
-private:
-    //DelayProcessor delayProcessor;
-    GrainProcessor grainProcessor;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState> parameters;
+    AudioVisualizer visualizer;
+
+private:
+    GrainProcessor grainProcessor;
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CapstonePluginAudioProcessor)
