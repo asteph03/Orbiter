@@ -113,8 +113,8 @@ void CapstonePluginAudioProcessor::prepareToPlay (double sampleRate, int samples
     spec.maximumBlockSize = static_cast<juce::uint32> (samplesPerBlock);
     spec.numChannels = getTotalNumInputChannels();
     
-    //delayProcessor.prepare(spec);
     grainProcessor.prepare(spec);
+    
 }
 
 void CapstonePluginAudioProcessor::update()
@@ -161,14 +161,11 @@ void CapstonePluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffe
     update();
     
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    //auto totalNumInputChannels  = getTotalNumInputChannels();
+    //auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    //auto audioBlock = dsp::AudioBlock<float>(buffer);
-    //auto context = dsp::ProcessContextReplacing<float>(audioBlock);
-    //delayProcessor.process(context);
-    
     grainProcessor.process(buffer);
+    visualizer.pushBuffer(buffer.getReadPointer(0), buffer.getNumSamples());
 }
 
 //==============================================================================
@@ -179,8 +176,8 @@ bool CapstonePluginAudioProcessor::hasEditor() const
 
 juce::AudioProcessorEditor* CapstonePluginAudioProcessor::createEditor()
 {
-    //return new CapstonePluginAudioProcessorEditor (*this);
-    return new GenericAudioProcessorEditor (*this);
+    return new CapstonePluginAudioProcessorEditor (*this, *parameters);
+    //return new GenericAudioProcessorEditor (*this);
 }
 
 //==============================================================================
