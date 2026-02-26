@@ -1,13 +1,3 @@
-/*
-  ==============================================================================
-
-    CircularBuffer.h
-    Created: 23 Jan 2026 1:05:45pm
-    Author:  Aidan Stephenson
-
-  ==============================================================================
-*/
-
 #pragma once
 
 using namespace juce;
@@ -53,29 +43,31 @@ public:
             
             if (circularBufferSize > bufferSize + writePos)
             {
-                // enough space in circularBuffer for input buffer -> no need to wrap
+                // Enough space in circular buffer for incoming buffer, copy and proceed
                 circularBuffer.copyFromWithRamp(channel, writePos, input, bufferSize, 0.1f, 0.1f);
             }
             else
             {
-                // not enough space for input buffer -> wrap to first index
+                // Not enough space in circular buffer for incoming buffer
+                // Copy # of samples until circular buffer is full, wrap around to index 0, and copy rest
                 int preWrapSamples = circularBufferSize - writePos;
                 int postWrapSamples = bufferSize - preWrapSamples;
                 
                 circularBuffer.copyFromWithRamp(channel, writePos, input, preWrapSamples, 0.1f, 0.1f);
                 circularBuffer.copyFromWithRamp(channel, 0, input, postWrapSamples, 0.1f, 0.1f);
+                
+                if (!firstWrap)
+                    firstWrap = true;
             }
         }
-        
-        //DBG("writePos = " << writePos);
-        //DBG("circularBufferSize = " << circularBufferSize);
-        //DBG("bufferSize = " << bufferSize);
         
         writePos += bufferSize;
         writePos = writePos % circularBufferSize;
     }
     
     int writePos = { 0 };
+    
+    bool firstWrap = false;
     
 private:
     AudioBuffer<float> circularBuffer;
