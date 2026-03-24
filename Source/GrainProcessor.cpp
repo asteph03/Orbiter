@@ -363,9 +363,9 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                 outputR = hiPass[1].processSample(outputR);
                 outputR = loPass[1].processSample(outputR);
                 
-                if (envelopeType == 2) { // ONLY FOR HARSH
-                    outputL = processHardClipper(outputL);
-                    outputR = processHardClipper(outputR);
+                if (envelopeType == 2) { // SOFTCLIPPING ONLY WITH HARSH ENVELOPE
+                    outputL = processSoftClipper(outputL);
+                    outputR = processSoftClipper(outputR);
                 }
                 
                 outputL = limit(outputL);
