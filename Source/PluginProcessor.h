@@ -61,6 +61,17 @@ public:
     
     std::unique_ptr<juce::AudioProcessorValueTreeState> parameters;
     AudioVisualizer visualizer;
+    VerticalMeter leftMeter, rightMeter;
+    LinearSmoothedValue<float> rmsLevelLeft, rmsLevelRight;
+    
+    juce::AudioPlayHead::PositionInfo getPlayheadInfo()
+    {
+        juce::AudioPlayHead::PositionInfo info;
+        if (auto* ph = getPlayHead())
+            if (auto pos = ph->getPosition())
+                info = *pos;
+        return info;
+    }
 
 private:
     GrainProcessor grainProcessor;
