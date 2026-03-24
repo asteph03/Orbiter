@@ -115,11 +115,21 @@ void CapstonePluginAudioProcessor::prepareToPlay (double sampleRate, int samples
     
     grainProcessor.prepare(spec);
     
+    rmsLevelLeft.reset(sampleRate, 0.5);
+    rmsLevelRight.reset(sampleRate, 0.5);
+    rmsLevelLeft.setCurrentAndTargetValue(-60.f);
+    rmsLevelRight.setCurrentAndTargetValue(-60.f);
 }
 
 void CapstonePluginAudioProcessor::update()
 {
-    //delayProcessor.update(*parameters);
+    auto info = getPlayheadInfo();
+    if (info.getBpm().hasValue())
+        grainProcessor.setBpm(*info.getBpm());
+    else
+        grainProcessor.setBpm(120.0);
+
+    grainProcessor.setPlayheadInfo(info);  // new
     grainProcessor.update(*parameters);
 }
 
@@ -158,14 +168,31 @@ bool CapstonePluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& la
 
 void CapstonePluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    update();
-    
     juce::ScopedNoDenormals noDenormals;
-    //auto totalNumInputChannels  = getTotalNumInputChannels();
-    //auto totalNumOutputChannels = getTotalNumOutputChannels();
+    update();
 
     grainProcessor.process(buffer);
+    
     visualizer.pushBuffer(buffer.getReadPointer(0), buffer.getNumSamples());
+    
+    rmsLevelLeft.skip(buffer.getNumSamples());
+    rmsLevelRight.skip(buffer.getNumSamples());
+    
+    float rmsL = Decibels::gainToDecibels(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float rmsR = Decibels::gainToDecibels(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    
+    if (rmsL < rmsLevelLeft.getCurrentValue())
+        rmsLevelLeft.setTargetValue(rmsL);
+    else
+        rmsLevelLeft.setCurrentAndTargetValue(rmsL);
+    
+    if (rmsR < rmsLevelRight.getCurrentValue())
+        rmsLevelRight.setTargetValue(rmsR);
+    else
+        rmsLevelRight.setCurrentAndTargetValue(rmsR);
+    
+    leftMeter.setLevel(rmsLevelLeft.getCurrentValue());
+    rightMeter.setLevel(rmsLevelRight.getCurrentValue());
 }
 
 //==============================================================================
