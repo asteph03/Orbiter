@@ -93,7 +93,7 @@ public:
         bpm = newBpm;
     }
     
-    float processHardClipper(float inputSample)
+    float processSoftClipper(float inputSample)
     {
         auto wetSignal = inputSample * juce::Decibels::decibelsToGain(16.f);
         wetSignal = (2.0 / juce::MathConstants<float>::pi) * std::atan(wetSignal);
