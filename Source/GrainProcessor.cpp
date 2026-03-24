@@ -10,6 +10,10 @@ void GrainProcessor::prepare(dsp::ProcessSpec& spec)
     baseGain.prepare(spec);
     baseGain.setGainDecibels(20.f);
     reverb.prepare(spec);
+    hiPass[0].prepare(spec);
+    hiPass[1].prepare(spec);
+    loPass[0].prepare(spec);
+    loPass[1].prepare(spec);
     
     const int numPoints = 1024;
     parabolicEnvelope.initialise ([numPoints](float index) {
@@ -53,24 +57,38 @@ void GrainProcessor::addParams(AudioProcessorParameterGroup& params)
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainDensity, 1), "Density", NormalisableRange<float>(2.f, 16.f, 0.01f), 10.f));
     
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainPitch, 1), "Pitch", NormalisableRange<float>(-12.f, 12.f, 1.f), 0.f));
-    params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::GrainEnvelope, 1), "Envelope", envelopeTypes, Parabolic));
+    params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::GrainEnvelope, 1), "Envelope", envelopeTypes, Normal));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainStereo, 1), "Stereo", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainOnset, 1), "Onset Spray", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainReverb, 1), "Reverb", NormalisableRange<float>(0, 100.f, 1.f), 0.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainLP, 1), "Lo Pass", NormalisableRange<float>(20.f, 22000.f, 1.f, 0.5f), 22000.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainHP, 1), "Hi Pass", NormalisableRange<float>(20.f, 22000.f, 1.f, 0.5f), 20.f));
     params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::GrainFreeze, 1), "Freeze", false));
+    params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::TempoSync, 1), "Tempo Sync", false));
+    params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::TempoTime, 1), "Tempo Time", beatSync, Eighth));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::TempoSwing, 1), "Tempo Swing", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
     
-    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::OutputGain, 1), "Output Gain", NormalisableRange<float>(-60.f, 12.f, 0.1f), 0.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::OutputGain, 1), "Output Gain", NormalisableRange<float>(-24.f, 24.f, 0.1f), 0.f));
 }
 
 bool GrainProcessor::update(AudioProcessorValueTreeState& params)
 {
     bool bypass = (bool)params.getRawParameterValue(PARAMS::GrainBypass)->load();
+    bool sync = (bool)params.getRawParameterValue(PARAMS::TempoSync)->load();
     float mix = params.getRawParameterValue(PARAMS::GrainMix)->load() * 0.01f;
     float size = params.getRawParameterValue(PARAMS::GrainSize)->load();
     float density = params.getRawParameterValue(PARAMS::GrainDensity)->load();
     float pitch = params.getRawParameterValue(PARAMS::GrainPitch)->load();
     float spray = params.getRawParameterValue(PARAMS::GrainOnset)->load();
     float rev = params.getRawParameterValue(PARAMS::GrainReverb)->load() * 0.01f;
+    float gain = params.getRawParameterValue(PARAMS::OutputGain)->load();
+    float hp = params.getRawParameterValue(PARAMS::GrainHP)->load();
+    float lp = params.getRawParameterValue(PARAMS::GrainLP)->load();
+    float swing = params.getRawParameterValue(PARAMS::TempoSwing)->load() * 0.01f;
+    int time = (int)params.getRawParameterValue(PARAMS::TempoTime)->load();
+    envelopeType = (int)params.getRawParameterValue(PARAMS::GrainEnvelope)->load();
+    stereoRange = (int)params.getRawParameterValue(PARAMS::GrainStereo)->load();
+    grainFreeze = (bool)params.getRawParameterValue(PARAMS::GrainFreeze)->load();
     
     for (auto& mixer : mixerBlend)
         mixer.setTargetValue(mix);
@@ -79,15 +97,13 @@ bool GrainProcessor::update(AudioProcessorValueTreeState& params)
         power.setTargetValue(bypass ? 0.f : 1.f);
     
     setScheduler(size, density, spray);
-    
+    setFilters(hp, lp);
     grainPitch = pitch;
-    
-    envelopeType = (int)params.getRawParameterValue(PARAMS::GrainEnvelope)->load();
-    stereoRange = (int)params.getRawParameterValue(PARAMS::GrainStereo)->load();
-    grainFreeze = (bool)params.getRawParameterValue(PARAMS::GrainFreeze)->load();
     reverb.setMix(rev);
+    outputGain.setGainDecibels(gain);
     
-    //DBG("update() envelope value: " + String(envelopeType));
+    tempoSync = sync;
+    calcInterval(time, swing);
     
     return true;
 }
@@ -96,52 +112,119 @@ void GrainProcessor::setScheduler(float size, int density, float spray)
 {
     // size parameter is in miliseconds, convert from ms to samples
     paramGrainSize = (size * sampleRate) / 1000.f;
-    
-    // density will apply to delay line, # of grains played back per unit of time (set at 1 second for now, but maybe change to a unit in beats?)
     grainDensity = density;
     samplesPerGrain = sampleRate / grainDensity;
     sprayFactor = spray;
 }
 
+void GrainProcessor::setFilters(float hpFreq, float lpFreq)
+{
+    hiPass[0].coefficients = dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, hpFreq);
+    hiPass[1].coefficients = dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, hpFreq);
+    
+    loPass[0].coefficients = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, lpFreq);
+    loPass[1].coefficients = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, lpFreq);
+    
+    //DBG("hpFreq: " << hpFreq << " . lpFreq: " << lpFreq);
+}
+
 void GrainProcessor::spawnGrain(int index)
 {
-    samplesSinceSpawn++;
-    
-    if (samplesSinceSpawn >= nextSpawn && grainPool.size() <= 10) {
-        Grain newGrain;
-        newGrain.currentPos = (index - 4401.0);
-        newGrain.grainSize = paramGrainSize;
-        newGrain.envPos = 0;
-        newGrain.playbackSpeed = std::pow(2.f, grainPitch / 12.f);
-        
-        int randomPos = randomSpawn.nextInt(Range<int>(-1 * stereoRange, stereoRange+1));
-        float stereo = (float)randomPos / 100.f;
-        
-        if (stereo == 0.f) {
-            newGrain.spreadL = 1.f;
-            newGrain.spreadR = 1.f;
+    if (tempoSync)
+    {
+        // Only attempt sync when the DAW is actually playing
+        if (!playheadInfo.getIsPlaying())
+        {
+            isSynced = false;
+            return;
         }
-        else if (stereo > 0.f) {
-            newGrain.spreadL = 1.f - stereo;
-            newGrain.spreadR = 1.f;
+
+        if (!isSynced)
+        {
+            auto ppqOpt = playheadInfo.getPpqPosition();
+            if (!ppqOpt.hasValue()) return;
+
+            double ppq = *ppqOpt;
+
+            double intervalInBeats = (beatInterval / sampleRate) * (bpm / 60.0);
+            double phaseInInterval = std::fmod(ppq, intervalInBeats * 2.0); // *2 to track pairs
+            
+            // Determine parity from the playhead so swing phase is always DAW-aligned
+            isEvenBeat = phaseInInterval < intervalInBeats;
+            
+            double beatsUntilNext;
+            if (isEvenBeat)
+            {
+                double beatsIntoInterval = std::fmod(ppq, intervalInBeats);
+                double longIntervalBeats = (swingIntervalLong / sampleRate) * (bpm / 60.0);
+                beatsUntilNext = longIntervalBeats - beatsIntoInterval;
+            }
+            else
+            {
+                double beatsIntoInterval = std::fmod(ppq, intervalInBeats);
+                double shortIntervalBeats = (swingIntervalShort / sampleRate) * (bpm / 60.0);
+                beatsUntilNext = shortIntervalBeats - beatsIntoInterval;
+            }
+
+            samplesUntilNextBeat = beatsUntilNext * (sampleRate * 60.0 / bpm);
+            samplesSinceSpawn = 0;
+            isSynced = true;
         }
-        else { // stereo < 0.f
-            newGrain.spreadL = 1.f;
-            newGrain.spreadR = 1.f + stereo;
+
+        samplesSinceSpawn++;
+
+        if (samplesSinceSpawn >= samplesUntilNextBeat && grainPool.size() <= 10)
+        {
+            // Spawn the grain
+            Grain newGrain;
+            newGrain.currentPos = (index - 4401.0);
+            if (newGrain.currentPos < 0)
+                newGrain.currentPos += circularBuffer.getSize();
+            newGrain.grainSize = paramGrainSize;
+            newGrain.envPos = 0;
+            newGrain.playbackSpeed = std::pow(2.f, grainPitch / 12.f);
+
+            int randomPos = randomSpawn.nextInt(juce::Range<int>(-1 * stereoRange, stereoRange + 1));
+            float stereo = (float)randomPos / 100.f;
+            if (stereo == 0.f)       { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f; }
+            else if (stereo > 0.f)   { newGrain.spreadL = 1.f - stereo; newGrain.spreadR = 1.f; }
+            else                     { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f + stereo; }
+
+            grainPool.push_back(newGrain);
+
+            samplesSinceSpawn = 0;
+            isEvenBeat = !isEvenBeat; // flip parity
+            samplesUntilNextBeat = isEvenBeat ? swingIntervalLong : swingIntervalShort;
         }
-        
-        if (newGrain.currentPos < 0) {
-            newGrain.currentPos += circularBuffer.getSize();
+    }
+    else
+    {
+        // Original free-running logic unchanged
+        samplesSinceSpawn++;
+
+        if (samplesSinceSpawn >= nextSpawn && grainPool.size() <= 10)
+        {
+            Grain newGrain;
+            newGrain.currentPos = (index - 4401.0);
+            if (newGrain.currentPos < 0)
+                newGrain.currentPos += circularBuffer.getSize();
+            newGrain.grainSize = paramGrainSize;
+            newGrain.envPos = 0;
+            newGrain.playbackSpeed = std::pow(2.f, grainPitch / 12.f);
+
+            int randomPos = randomSpawn.nextInt(juce::Range<int>(-1 * stereoRange, stereoRange + 1));
+            float stereo = (float)randomPos / 100.f;
+            if (stereo == 0.f)       { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f; }
+            else if (stereo > 0.f)   { newGrain.spreadL = 1.f - stereo; newGrain.spreadR = 1.f; }
+            else                     { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f + stereo; }
+
+            int randomSpray = randomSpawn.nextInt(juce::Range<int>(-1 * sprayFactor, sprayFactor + 1));
+            float spray = randomSpray / 100.f;
+
+            grainPool.push_back(newGrain);
+            samplesSinceSpawn = 0;
+            nextSpawn = samplesPerGrain + ((samplesPerGrain / 1.5f) * spray);
         }
-        
-        grainPool.push_back(newGrain);
-        
-        int randomSpray = randomSpawn.nextInt(Range<int>(-1 * sprayFactor, sprayFactor+1));
-        float spray = randomSpray / 100.f;
-        
-        samplesSinceSpawn = 0;
-        
-        nextSpawn = samplesPerGrain + ((samplesPerGrain / 1.5f) * spray);
     }
 }
 
@@ -156,6 +239,8 @@ void GrainProcessor::reset()
 {
     circularBuffer.clearBuffer();
     reverb.reset();
+    isSynced = false;       // force re-sync on next play
+    samplesSinceSpawn = 0;
 }
 
 float GrainProcessor::calculateEnvelope(int tableIndex)
@@ -164,19 +249,19 @@ float GrainProcessor::calculateEnvelope(int tableIndex)
     
     switch(envelopeType)
     {
-        case Parabolic:
+        case Normal:
             envVal = parabolicEnvelope[tableIndex];
             //DBG("Normal");
             break;
-        case Trapezoidal:
-            envVal = trapezoidEnvelope[tableIndex];
-            //DBG("Harsh");
-            break;
-        case CosineBell:
+        case Smooth:
             envVal = bellEnvelope[tableIndex];
             //DBG("Smooth");
             break;
-        case SlowAttackBell:
+        case Harsh:
+            envVal = trapezoidEnvelope[tableIndex];
+            //DBG("Harsh");
+            break;
+        case Swell:
             envVal = slowBellEnvelope[tableIndex];
             //DBG("Swell");
             break;
@@ -192,9 +277,10 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
     
     circularBuffer.fillBuffer(buffer);
     
-    if (circularBuffer.firstWrap) {
+    if (circularBuffer.firstWrap)
+    {
         // Prevents any reading from circular buffer before first wrap is complete
-        // Fixes bug where gain peaks when first instantiated in DAW
+        // Fixes bug where gain peaks at 10+ dB when first instantiated in DAW
         
         writePosition = circularBuffer.writePos;
         
@@ -255,7 +341,7 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                         grain.isFinished = true;
                     }
                     else {
-                        grain.envPos = -0.5 * samplesPerGrain;
+                        grain.envPos = (-1.0 * samplesPerGrain) + grain.grainSize;
                         grain.replayCount++;
                         
                         if (grain.replayCount >= 20)
@@ -265,28 +351,45 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                         
             }
             
-            outputL = baseGain.processSample(outputL);
-            outputR = baseGain.processSample(outputR);
             
-            outputL = limit(outputL);
-            outputR = limit(outputR);
-            
-            outputL = reverb.processSample(outputL, 0);
-            outputR = reverb.processSample(outputR, 1);
+            {
+                // SIGNAL CHAIN
+                outputL = baseGain.processSample(outputL);
+                outputR = baseGain.processSample(outputR);
+                
+                outputL = hiPass[0].processSample(outputL);
+                outputL = loPass[0].processSample(outputL);
+                
+                outputR = hiPass[1].processSample(outputR);
+                outputR = loPass[1].processSample(outputR);
+                
+                if (envelopeType == 2) { // ONLY FOR HARSH
+                    outputL = processHardClipper(outputL);
+                    outputR = processHardClipper(outputR);
+                }
+                
+                outputL = limit(outputL);
+                outputR = limit(outputR);
+                
+                outputL = reverb.processSample(outputL, 0);
+                outputR = reverb.processSample(outputR, 1);
+            }
             
             float wet = mixerBlend[0].getTargetValue();
             float dry = 1.f - wet;
             
-            
+            float mixedL, mixedR;
             if (powerBlend[0].getCurrentValue() > 0.0001 || powerBlend[0].getTargetValue() > 0.5)
             {
-                channelDataL[i] = (dry * inputL) + (wet * (outputL));
-                channelDataR[i] = (dry * inputR) + (wet * (outputR));
+                mixedL = (dry * inputL) + (wet * (outputL));
+                mixedR = (dry * inputR) + (wet * (outputR));
+                channelDataL[i] = outputGain.processSample(mixedL);
+                channelDataR[i] = outputGain.processSample(mixedR);
             }
             else
             {
-                channelDataL[i] = inputL;
-                channelDataR[i] = inputR;
+                channelDataL[i] = outputGain.processSample(inputL);
+                channelDataR[i] = outputGain.processSample(inputR);
             }
         }
     }
