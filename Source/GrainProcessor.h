@@ -114,66 +114,21 @@ public:
         float mpb = 60000.f / bpm; // miliseconds per beat
         
         switch(time) {
-            case Whole:
-                mpi = mpb * 4.f;
-                //DBG("Whole");
-                break;
-            case HalfDot:
-                mpi = mpb * 2.f * 1.5f;
-                //DBG("HalfDot");
-                break;
-            case Half:
-                mpi = mpb * 2.f;
-                //DBG("Half");
-                break;
-            case HalfTrip:
-                mpi = mpb * 2.f * (2.f / 3.f);
-                //DBG("HalfTrip");
-                break;
-            case QuartDot:
-                mpi = mpb * 1.5f;
-                //DBG("QuartDot");
-                break;
-            case Quarter:
-                mpi = mpb;
-                //DBG("Quarter");
-                break;
-            case QuartTrip:
-                mpi = mpb * (2.f / 3.f);
-                //DBG("QuartTrip");
-                break;
-            case EightDot:
-                mpi = mpb * 0.5f * 1.5f;
-                //DBG("EightDot");
-                break;
-            case Eighth:
-                mpi = mpb * 0.5f;
-                //DBG("Eighth");
-                break;
-            case EightTrip:
-                mpi = mpb * 0.5f * (2.f / 3.f);
-                //DBG("EightTrip");
-                break;
-            case SixtDot:
-                mpi = mpb * 0.25f * 1.5f;
-                //DBG("SixtDot");
-                break;
-            case Sixteenth:
-                mpi = mpb * 0.25f;
-                //DBG("Sixteenth");
-                break;
-            case SixtTrip:
-                mpi = mpb * 0.25f * (2.f / 3.f);
-                //DBG("SixtTrip");
-                break;
-            case ThirDot:
-                mpi = mpb * 0.125f * 1.5f;
-                //DBG("ThirDot");
-                break;
-            case ThirtySec:
-                mpi = mpb * 0.125f;
-                //DBG("ThirtySec");
-                break;
+            case Whole: mpi = mpb * 4.f; break;
+            case HalfDot: mpi = mpb * 2.f * 1.5f; break;
+            case Half: mpi = mpb * 2.f; break;
+            case HalfTrip: mpi = mpb * 2.f * (2.f / 3.f); break;
+            case QuartDot: mpi = mpb * 1.5f; break;
+            case Quarter: mpi = mpb; break;
+            case QuartTrip: mpi = mpb * (2.f / 3.f); break;
+            case EightDot: mpi = mpb * 0.5f * 1.5f; break;
+            case Eighth: mpi = mpb * 0.5f; break;
+            case EightTrip: mpi = mpb * 0.5f * (2.f / 3.f); break;
+            case SixtDot: mpi = mpb * 0.25f * 1.5f; break;
+            case Sixteenth: mpi = mpb * 0.25f; break;
+            case SixtTrip: mpi = mpb * 0.25f * (2.f / 3.f); break;
+            case ThirDot: mpi = mpb * 0.125f * 1.5f; break;
+            case ThirtySec: mpi = mpb * 0.125f; break;
         }
         
         beatInterval = (mpi * sampleRate * 0.001f);
