@@ -3,7 +3,7 @@
 AudioVisualizer::AudioVisualizer()
 {
     displayBuffer.clear();
-    startTimerHz(60);
+    startTimerHz(120);
 }
 
 AudioVisualizer::~AudioVisualizer()
@@ -82,28 +82,32 @@ void AudioVisualizer::paint(juce::Graphics& g)
     auto w = bounds.getWidth();
     auto h = bounds.getHeight();
     
-    // Background
-    ColourGradient gradient1(Colour(0xff475563), w*0.5f, 0, Colour(0xff3e4a57), w*0.5f, h, false);
-    g.setGradientFill(gradient1);
+    ColourGradient gradient(Colour(0xff475563), w*0.5f, 0, Colour(0xff3e4a57), w*0.5f, h, false);
+    g.setGradientFill(gradient);
     g.fillRoundedRectangle(0, 0, w, h, 8.f);
 
     drawWaveform(g);
     
-    ColourGradient gradient2(Colour(0xff8f8f8f), w*0.25f, 0, Colour(0xff999999), w*0.66f, h, false);
-    g.setGradientFill(gradient2);
+    g.setColour(Colour(0xff2d313b));
+    g.fillRect(0, 0, 4, 12);
+    g.fillRect(0, h-12, 4, 12);
+    
+    ColourGradient borderGradient(Colour(0xff999999), w*0.25f, 0, Colour(0xffababab), w*0.66f, h, false);
+    g.setGradientFill(borderGradient);
     g.drawRoundedRectangle(2, 2, w-4, h-4, 8.f, 4.f);
 }
 
 void AudioVisualizer::drawWaveform(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
+    bounds.removeFromLeft(2.f);
     auto width  = bounds.getWidth();
     auto height = bounds.getHeight();
     auto numSamples = displayBuffer.getNumSamples();
 
     juce::Path waveformPath;
 
-    // Forward pass — top of waveform (positive peaks)
+    // Forward pass — positive peaks of waveform
     for (int x = 0; x < (int)width; ++x)
     {
         int sampleIndex = (displayBufferWritePos + (int)juce::jmap((float)x,
@@ -117,7 +121,7 @@ void AudioVisualizer::drawWaveform(juce::Graphics& g)
         else        waveformPath.lineTo((float)x, y);
     }
 
-    // Reverse pass — bottom of waveform (negative peaks)
+    // Reverse pass — negative peaks of waveform
     for (int x = (int)width - 1; x >= 0; --x)
     {
         int sampleIndex = (displayBufferWritePos + (int)juce::jmap((float)x,
@@ -132,8 +136,8 @@ void AudioVisualizer::drawWaveform(juce::Graphics& g)
 
     waveformPath.closeSubPath();
 
-    // Fill
     g.setColour(visualizerColor);
+    g.drawLine(0, bounds.getCentreY(), width, bounds.getCentreY(), 0.1f);
     g.fillPath(waveformPath);
 }
 
