@@ -31,3 +31,55 @@ private:
     
     Colour visualizerColor;
 };
+
+class VerticalMeter : public juce::Component
+{
+public:
+    
+    VerticalMeter() {}
+    
+    void paint(Graphics& g) override
+    {
+        auto bounds = getLocalBounds().toFloat();
+        auto h = bounds.getHeight();
+        g.setColour(Colour(0xff969696).withAlpha(0.3f));
+        g.fillAll();
+        
+        g.setColour(levelColorBright);
+        auto value = jmap(level, -60.f, 6.f, 0.f, h);
+        auto lightBounds = jmin(value, h*0.5f);
+        g.fillRect(bounds.removeFromBottom(lightBounds));
+        
+        if (value > h*0.5f) {
+            g.setColour(levelColorMedium);
+            
+            auto mediumBounds = jmin(value, h*0.909f);
+            g.fillRect(bounds.removeFromBottom(mediumBounds - h*0.5f));
+            
+            if (value > h*0.909f) {
+                g.setColour(levelColorDark);
+                
+                auto darkBounds = jmin(value, h);
+                g.fillRect(bounds.removeFromBottom(darkBounds - h*0.909f));
+            }
+        }
+    }
+    
+    void setLevel(const float val)
+    {
+        level = val;
+    }
+    
+    void setTheme(Colour themeColorBright, Colour themeColorMedium, Colour themeColorDark)
+    {
+        levelColorBright = themeColorBright;
+        levelColorMedium = themeColorMedium;
+        levelColorDark = themeColorDark;
+    }
+    
+private:
+    float level = -60.f;
+    
+    Colour levelColorBright, levelColorMedium, levelColorDark;
+    
+};
