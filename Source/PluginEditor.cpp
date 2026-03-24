@@ -10,8 +10,10 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-CapstonePluginAudioProcessorEditor::CapstonePluginAudioProcessorEditor (CapstonePluginAudioProcessor& p, juce::AudioProcessorValueTreeState& vts) : AudioProcessorEditor (&p), audioProcessor (p), apvts(vts), visualizer(p.visualizer)
+CapstonePluginAudioProcessorEditor::CapstonePluginAudioProcessorEditor (CapstonePluginAudioProcessor& p, juce::AudioProcessorValueTreeState& vts) : AudioProcessorEditor (&p), audioProcessor (p), apvts(vts), visualizer(p.visualizer), leftMeter(p.leftMeter), rightMeter(p.rightMeter)
 {
+    startTimerHz(30);
+    
     addAndMakeVisible(mixKnob = new FxKnob(PARAMS::GrainMix));
     mixAttach = std::make_unique<SliderAttachment>(apvts, PARAMS::GrainMix, *mixKnob);
     
@@ -33,6 +35,12 @@ CapstonePluginAudioProcessorEditor::CapstonePluginAudioProcessorEditor (Capstone
     addAndMakeVisible(reverbKnob = new FxKnob(PARAMS::GrainReverb));
     reverbAttach = std::make_unique<SliderAttachment>(apvts, PARAMS::GrainReverb, *reverbKnob);
     
+    addAndMakeVisible(beatKnob = new FxKnob(PARAMS::TempoTime));
+    beatAttach = std::make_unique<SliderAttachment>(apvts, PARAMS::TempoTime, *beatKnob);
+    
+    addAndMakeVisible(swingKnob = new FxKnob(PARAMS::TempoSwing));
+    swingAttach = std::make_unique<SliderAttachment>(apvts, PARAMS::TempoSwing, *swingKnob);
+    
     addAndMakeVisible(orbitButton = new OrbitButton(PARAMS::GrainFreeze));
     orbitAttach = std::make_unique<ButtonAttachment>(apvts, PARAMS::GrainFreeze, *orbitButton);
     orbit = orbitButton->getToggleState();
@@ -43,6 +51,15 @@ CapstonePluginAudioProcessorEditor::CapstonePluginAudioProcessorEditor (Capstone
     addAndMakeVisible(bypassButton = new BypassButton(PARAMS::GrainBypass));
     bypassAttach = std::make_unique<ButtonAttachment>(apvts, PARAMS::GrainBypass, *bypassButton);
     bypass = bypassButton->getToggleState();
+    
+    addAndMakeVisible(syncButton = new SyncButton(PARAMS::TempoSync));
+    syncAttach = std::make_unique<ButtonAttachment>(apvts, PARAMS::TempoSync, *syncButton);
+    sync = syncButton->getToggleState();
+    
+    addAndMakeVisible(eqComponent = new EQComponent(apvts));
+    
+    addAndMakeVisible(leftMeter);
+    addAndMakeVisible(rightMeter);
     
     addAndMakeVisible(gainSlider = new GainSlider(PARAMS::OutputGain));
     gainAttach = std::make_unique<SliderAttachment>(apvts, PARAMS::OutputGain, *gainSlider);
@@ -57,9 +74,15 @@ CapstonePluginAudioProcessorEditor::CapstonePluginAudioProcessorEditor (Capstone
         setTheme(orbit, bypass);
     };
     
+    syncButton->onClick = [this] {
+        sync = syncButton->getToggleState();
+        repaint();
+        resized();
+    };
+    
     addAndMakeVisible(visualizer);
     
-    setSize (700, 500);
+    setSize (700, 580);
     resized();
 }
 
@@ -73,9 +96,11 @@ CapstonePluginAudioProcessorEditor::~CapstonePluginAudioProcessorEditor()
     pitchAttach.reset();
     reverbAttach.reset();
     orbitAttach.reset();
-    //envAttach.reset();
     bypassAttach.reset();
     gainAttach.reset();
+    syncAttach.reset();
+    swingAttach.reset();
+    beatAttach.reset();
     
     if (mixKnob) { delete mixKnob; }
     if (sizeKnob) { delete sizeKnob; }
@@ -88,6 +113,10 @@ CapstonePluginAudioProcessorEditor::~CapstonePluginAudioProcessorEditor()
     if (envButton) { delete envButton; }
     if (bypassButton) { delete bypassButton; }
     if (gainSlider) { delete gainSlider; }
+    if (eqComponent) { delete eqComponent; }
+    if (syncButton) { delete syncButton; }
+    if (swingKnob) { delete swingKnob; }
+    if (beatKnob) { delete beatKnob; }
 }
 
 //==============================================================================
@@ -101,9 +130,7 @@ void CapstonePluginAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour(Colour(0xff1c253b));
     g.fillAll();
     
-    ColourGradient gradient(Colour(0xff373c47), w*0.25, 0, Colour(0xff2d313b), w*0.75, h, false);
-    g.setGradientFill(gradient);
-    
+    g.setColour(Colour(0xff2d313b));
     g.fillRoundedRectangle(8, 8, w-16, h-16, 5.f);
     g.setColour(Colour(0xff697182));
     g.drawRoundedRectangle(8, 8, w-16, h-16, 5.f, 1.f);
@@ -112,14 +139,24 @@ void CapstonePluginAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour(Colour(0xffe3e3e3));
     g.setFont(f);
     
-    g.drawText("Mix", 538, 468, 80, 12, Justification::centred);
-    g.drawText("Grain Density", 30, 468, 80, 12, Justification::centred);
-    g.drawText("Grain Size", 30, 372, 80, 12, Justification::centred);
-    g.drawText("Stereo", 140, 372, 80, 12, Justification::centred);
-    g.drawText("Onset Spray", 140, 468, 80, 12, Justification::centred);
-    g.drawText("Pitch", 250, 372, 80, 12, Justification::centred);
-    g.drawText("Reverb", 250, 468, 80, 12, Justification::centred);
-    g.drawText("Mode", 391, 398, 80, 12, Justification::centred);
+    String textString;
+    
+    if (sync)
+        textString = "Swing";
+    else
+        textString = "Spray";
+    
+    g.drawText("Grain Size", 24, h-128, 80, 12, Justification::centred);
+    g.drawText("Rate", 130, h-128, 80, 12, Justification::centred);
+    g.drawText(textString, 236, h-128, 80, 12, Justification::centred);
+    
+    g.drawText("Stereo", 24, h-32, 80, 12, Justification::centred);
+    g.drawText("Pitch", 130, h-32, 80, 12, Justification::centred);
+    g.drawText("Reverb", 236, h-32, 80, 12, Justification::centred);
+    
+    g.drawText("Mix", 530, h-32, 80, 12, Justification::centred);
+    g.drawText("Mode", 385, h-102, 80, 12, Justification::centred);
+    g.drawText("Out", 618, h-32, 80, 12, Justification::centred);
 }
 
 void CapstonePluginAudioProcessorEditor::resized()
@@ -128,20 +165,33 @@ void CapstonePluginAudioProcessorEditor::resized()
     float w = bounds.getWidth();
     float h = bounds.getHeight();
     
+    sprayKnob->setVisible(!sync);
+    swingKnob->setVisible(sync);
+    densityKnob->setVisible(!sync);
+    beatKnob->setVisible(sync);
+    
     setTheme(orbit, bypass);
     
-    mixKnob->setBounds(w-160, h-120, 80, 80);
-    sizeKnob->setBounds(38, h-200, 64, 64);
-    densityKnob->setBounds(38, h-104, 64, 64);
-    stereoKnob->setBounds(148, h-200, 64, 64);
-    sprayKnob->setBounds(148, h-104, 64, 64);
-    pitchKnob->setBounds(258, h-200, 64, 64);
-    reverbKnob->setBounds(258, h-104, 64, 64);
-    orbitButton->setBounds(348, h-78, 166, 56);
-    envButton->setBounds(348, h-198, 166, 88);
-    bypassButton->setBounds(w-160, h-198, 80, 48);
-    visualizer.setBounds(36, 24, 588, 262);
-    gainSlider->setBounds(638, 24, 40, 452);
+    sizeKnob->setBounds(32, h-200, 64, 64);
+    densityKnob->setBounds(138, h-200, 64, 64);
+    beatKnob->setBounds(138, h-200, 64, 64);
+    sprayKnob->setBounds(244, h-200, 64, 64);
+    swingKnob->setBounds(244, h-200, 64, 64);
+    
+    stereoKnob->setBounds(32, h-104, 64, 64);
+    pitchKnob->setBounds(138, h-104, 64, 64);
+    reverbKnob->setBounds(244, h-104, 64, 64);
+    
+    mixKnob->setBounds(w-168, h-120, 80, 80);
+    orbitButton->setBounds(342, h-78, 166, 56);
+    envButton->setBounds(342, h-198, 166, 88);
+    bypassButton->setBounds(w-176, h-198, 96, 32);
+    syncButton->setBounds(w-176, h-162, 96, 32);
+    visualizer.setBounds(24, 24, 596, 262);
+    leftMeter.setBounds(636, 24, 20, 512);
+    rightMeter.setBounds(660, 24, 20, 512);
+    gainSlider->setBounds(634, 24, 48, 512);
+    eqComponent->setBounds(32, 298, 580, 72);
 }
 
 void CapstonePluginAudioProcessorEditor::setTheme(bool o, bool b)
@@ -164,9 +214,21 @@ void CapstonePluginAudioProcessorEditor::setTheme(bool o, bool b)
     sprayKnob->setTheme(themeLightColor[column], themeDarkColor[column]);
     pitchKnob->setTheme(themeLightColor[column], themeDarkColor[column]);
     reverbKnob->setTheme(themeLightColor[column], themeDarkColor[column]);
+    swingKnob->setTheme(themeLightColor[column], themeDarkColor[column]);
+    beatKnob->setTheme(themeLightColor[column], themeDarkColor[column]);
     orbitButton->setTheme(themeLightColor[column], themeDarkColor[column]);
     envButton->setTheme(themeLightColor[column], themeDarkColor[column]);
+    syncButton->setTheme(themeLightColor[column], themeDarkColor[column]);
     visualizer.setTheme(themeLightColor[column]);
+    leftMeter.setTheme(levelLightColor[column], themeLightColor[column], themeDarkColor[column]);
+    rightMeter.setTheme(levelLightColor[column], themeLightColor[column], themeDarkColor[column]);
+    eqComponent->setTheme(themeLightColor[column]);
     
     repaint();
+}
+
+void CapstonePluginAudioProcessorEditor::timerCallback()
+{
+    leftMeter.repaint();
+    rightMeter.repaint();
 }
