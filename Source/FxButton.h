@@ -55,6 +55,7 @@ public:
         setComponentID(componentID);
         setClickingTogglesState(true);
         setWantsKeyboardFocus(false);
+        setTheme();
     }
     
     void paintButton(Graphics& g, bool, bool) override
@@ -64,7 +65,7 @@ public:
         auto h = bounds.getHeight();
         
         if (getToggleState()) {
-            ColourGradient gradient(Colour(0xff808080), w/2, h, Colour(0xff969696), w/2, 0, false);
+            ColourGradient gradient(buttonColorDark, w/2, h, buttonColorBright, w/2, 0, false);
             g.setGradientFill(gradient);
             g.fillRoundedRectangle(2, 2, w-4, h-4, 5.f);
         }
@@ -75,10 +76,58 @@ public:
         g.drawText("Bypass", 2, 2, w-4, h-4, Justification::centred);
     }
     
+    void setTheme()
+    {
+        buttonColorDark = Colour(0xff737373);
+        buttonColorBright = Colour(0xff969696);
+    }
+    
     private:
+    juce::Colour buttonColorDark;
+    juce::Colour buttonColorBright;
+    
 };
 
-class EnvelopeButton : public juce::Button
+class SyncButton : public juce::Button
+{
+public:
+    SyncButton(const String& componentID) : juce::Button("SyncButton")
+    {
+        setComponentID(componentID);
+        setClickingTogglesState(true);
+        setWantsKeyboardFocus(false);
+    }
+    
+    void paintButton(Graphics& g, bool, bool) override
+    {
+        auto bounds = getLocalBounds();
+        auto w = bounds.getWidth();
+        auto h = bounds.getHeight();
+        
+        if (getToggleState()) {
+            ColourGradient gradient(buttonColorDark, w/2, h, buttonColorBright, w/2, 0, false);
+            g.setGradientFill(gradient);
+            g.fillRoundedRectangle(2, 2, w-4, h-4, 5.f);
+        }
+        
+        g.setColour(Colour(0xffe3e3e3));
+        g.drawRoundedRectangle(2, 2, w-4, h-4, 5.f, 1.5f);
+        
+        g.drawText("Tempo Sync", 2, 2, w-4, h-4, Justification::centred);
+    }
+    
+    void setTheme(Colour bright, Colour dark)
+    {
+        buttonColorBright = bright;
+        buttonColorDark = dark;
+    }
+    
+    private:
+    juce::Colour buttonColorDark;
+    juce::Colour buttonColorBright;
+};
+
+class EnvelopeButton : public juce::Button, private juce::Timer
 {
 public:
     EnvelopeButton(const String& componentID, AudioProcessorValueTreeState& vts) : juce::Button("EnvelopeButton"), apvts(vts)
@@ -90,6 +139,8 @@ public:
         addMouseListener(this, true);
         
         instantiatePaths();
+        
+        startTimerHz(30);
     }
     
     void instantiatePaths()
@@ -200,6 +251,11 @@ public:
     {
         buttonColorBright = bright;
         buttonColorDark = dark;
+    }
+    
+    void timerCallback()
+    {
+        repaint();
     }
     
 private:
