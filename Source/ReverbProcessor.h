@@ -38,6 +38,9 @@ public:
             lp.prepare(spec);
             lp.coefficients = dsp::IIR::Coefficients<float>::makeFirstOrderLowPass(sampleRate, 4000.f);
         }
+
+        lastDelayEffectOutput[0] = 0.f;
+        lastDelayEffectOutput[1] = 0.f;
     }
     
     void setMix(float mixVal)
@@ -76,7 +79,8 @@ public:
         diffused = ap3.popSample(channel);
         ap4.pushSample(channel, diffused);
         diffused = ap4.popSample(channel);
-        
+
+        float outputSample;
         if (channel == 0) {
             float leftNode = diffused + (0.5f * lastDelayEffectOutput[1]);
             float leftOut = tankL.popSample(0);
@@ -85,7 +89,7 @@ public:
             leftOut = lowPass[0].processSample(leftOut);
             leftOut = limit(leftOut);
             lastDelayEffectOutput[0] = leftOut;
-            return (dry * inputSample) + (wet * leftOut);
+            outputSample = (dry * inputSample) + (wet * leftOut);
         }
         else { // channel == 1
             float rightNode = diffused + (0.5f * lastDelayEffectOutput[0]);
@@ -95,18 +99,24 @@ public:
             rightOut = lowPass[1].processSample(rightOut);
             rightOut = limit(rightOut);
             lastDelayEffectOutput[1] = rightOut;
-            return (dry * inputSample) + (wet * rightOut);
+            outputSample = (dry * inputSample) + (wet * rightOut);
         }
+
+        //DBG("channel: " << channel << " sample: " << outputSample);
+        return outputSample;
     }
     
     static float limit (float x) noexcept
     {
+        if (std::isnan(x) || std::isinf(x)) return 0.f;
+        
         auto out = 3.5f * juce::dsp::FastMathApproximations::tanh(0.3f * x);
-        return jlimit(-3.5f, 3.5f, out);
+        return jlimit(-1.f, 1.f, out);
     }
     
 private:
     float sampleRate;
+    float feedbackL, feedbackR;
     
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> ap1, ap2, ap3, ap4, tankL, tankR;
     std::array<float, 2> lastDelayEffectOutput;
