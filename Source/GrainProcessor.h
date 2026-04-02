@@ -84,8 +84,10 @@ public:
     
     static float limit (float x) noexcept
     {
+        if (std::isnan(x) || std::isinf(x)) return 0.f;
+        
         auto out = 3.5f * juce::dsp::FastMathApproximations::tanh(0.3f * x);
-        return jlimit(-3.5f, 3.5f, out);
+        return jlimit(-1.f, 1.f, out);
     }
     
     void setBpm(float newBpm)
