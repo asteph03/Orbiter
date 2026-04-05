@@ -70,10 +70,10 @@ public:
     
     StringArray envelopeTypes =
     {
-        "Parabolic",
-        "Cosine Bell",
-        "Trapezoidal",
-        "Slow Attack Bell",
+        "Normal",
+        "Smooth",
+        "Harsh",
+        "Swell",
     };
 
     StringArray beatSync =
