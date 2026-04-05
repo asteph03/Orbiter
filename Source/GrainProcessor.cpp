@@ -51,24 +51,25 @@ void GrainProcessor::prepare(dsp::ProcessSpec& spec)
 
 void GrainProcessor::addParams(AudioProcessorParameterGroup& params)
 {
-    params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::GrainBypass, 1), "Bypass", false));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainMix, 1), "Mix", NormalisableRange<float>(0.f, 100.f, 1.f), 50.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainSize, 1), "Size", NormalisableRange<float>(30.f, 120.f, 0.1f, 1.1f), 60.f));
-    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainDensity, 1), "Density", NormalisableRange<float>(2.f, 16.f, 0.01f), 10.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainDensity, 1), "Rate", NormalisableRange<float>(2.f, 16.f, 0.01f), 10.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainOnset, 1), "Spray", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
     
-    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainPitch, 1), "Pitch", NormalisableRange<float>(-12.f, 12.f, 1.f), 0.f));
-    params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::GrainEnvelope, 1), "Envelope", envelopeTypes, Normal));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::OutputGain, 1), "Output Gain", NormalisableRange<float>(-24.f, 24.f, 0.1f), 0.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainStereo, 1), "Stereo", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
-    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainOnset, 1), "Onset Spray", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
+    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainPitch, 1), "Pitch", NormalisableRange<float>(-12.f, 12.f, 1.f), 0.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainReverb, 1), "Reverb", NormalisableRange<float>(0, 100.f, 1.f), 0.f));
+    
+    params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::GrainFreeze, 1), "Orbit Mode", false));
+    params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::GrainEnvelope, 1), "Envelope", envelopeTypes, Normal));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainLP, 1), "Lo Pass", NormalisableRange<float>(20.f, 22000.f, 1.f, 0.5f), 22000.f));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::GrainHP, 1), "Hi Pass", NormalisableRange<float>(20.f, 22000.f, 1.f, 0.5f), 20.f));
-    params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::GrainFreeze, 1), "Freeze", false));
+    
+    params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::GrainBypass, 1), "Bypass", false));
     params.addChild(std::make_unique<AudioParameterBool>(ParameterID(PARAMS::TempoSync, 1), "Tempo Sync", false));
     params.addChild(std::make_unique<AudioParameterChoice>(ParameterID(PARAMS::TempoTime, 1), "Tempo Time", beatSync, Eighth));
     params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::TempoSwing, 1), "Tempo Swing", NormalisableRange<float>(0.f, 100.f, 1.f), 0.f));
-    
-    params.addChild(std::make_unique<AudioParameterFloat>(ParameterID(PARAMS::OutputGain, 1), "Output Gain", NormalisableRange<float>(-24.f, 24.f, 0.1f), 0.f));
 }
 
 bool GrainProcessor::update(AudioProcessorValueTreeState& params)
