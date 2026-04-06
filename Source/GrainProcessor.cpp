@@ -8,7 +8,7 @@ void GrainProcessor::prepare(dsp::ProcessSpec& spec)
     grainPool.reserve(10);
     outputGain.prepare(spec);
     baseGain.prepare(spec);
-    baseGain.setGainDecibels(20.f);
+    baseGain.setGainDecibels(16.f);
     reverb.prepare(spec);
     hiPass[0].prepare(spec);
     hiPass[1].prepare(spec);
@@ -25,11 +25,11 @@ void GrainProcessor::prepare(dsp::ProcessSpec& spec)
     trapezoidEnvelope.initialise ([numPoints](float index) {
         float x = index / (float)(numPoints - 1);
         if (x <= 0.25) // ATTACK
-            return 8.4f * x;
+            return 8.f * x;
         else if (x >= 0.75) // RELEASE
-            return (-8.4f * x) + 8.4f;
+            return (-8.f * x) + 8.f;
         else // SUSTAIN
-            return 2.1f;
+            return 2.f;
         }, numPoints);
     
     bellEnvelope.initialise ([numPoints](float index) {
@@ -187,10 +187,13 @@ void GrainProcessor::spawnGrain(int index)
 
             int randomPos = randomSpawn.nextInt(juce::Range<int>(-1 * stereoRange, stereoRange + 1));
             float stereo = (float)randomPos / 100.f;
-            if (stereo == 0.f)       { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f; }
-            else if (stereo > 0.f)   { newGrain.spreadL = 1.f - stereo; newGrain.spreadR = 1.f; }
-            else                     { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f + stereo; }
+            float panAngle = (stereo + 1.0f) * juce::MathConstants<float>::halfPi / 2.0f;
+            newGrain.spreadL = dsp::FastMathApproximations::cos(panAngle);
+            newGrain.spreadR = dsp::FastMathApproximations::sin(panAngle);
 
+            float expectedOverlap = grainDensity * (newGrain.grainSize / sampleRate);
+            newGrain.amplitude = 1.0f / std::sqrt(expectedOverlap);
+            
             grainPool.push_back(newGrain);
 
             samplesSinceSpawn = 0;
@@ -215,12 +218,15 @@ void GrainProcessor::spawnGrain(int index)
 
             int randomPos = randomSpawn.nextInt(juce::Range<int>(-1 * stereoRange, stereoRange + 1));
             float stereo = (float)randomPos / 100.f;
-            if (stereo == 0.f)       { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f; }
-            else if (stereo > 0.f)   { newGrain.spreadL = 1.f - stereo; newGrain.spreadR = 1.f; }
-            else                     { newGrain.spreadL = 1.f; newGrain.spreadR = 1.f + stereo; }
+            float panAngle = (stereo + 1.0f) * juce::MathConstants<float>::halfPi / 2.0f;
+            newGrain.spreadL = dsp::FastMathApproximations::cos(panAngle);
+            newGrain.spreadR = dsp::FastMathApproximations::sin(panAngle);
 
             int randomSpray = randomSpawn.nextInt(juce::Range<int>(-1 * sprayFactor, sprayFactor + 1));
             float spray = randomSpray / 100.f;
+            
+            float expectedOverlap = grainDensity * (newGrain.grainSize / sampleRate);
+            newGrain.amplitude = 1.0f / std::sqrt(expectedOverlap);
 
             grainPool.push_back(newGrain);
             samplesSinceSpawn = 0;
@@ -277,6 +283,7 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
     numChannels = buffer.getNumChannels();
     
     circularBuffer.fillBuffer(buffer);
+    activeGrainCount = 0;
     
     if (circularBuffer.firstWrap)
     {
@@ -299,6 +306,7 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
             float outputR = 0.f;
             for (auto& grain : grainPool) {
                 if (grain.isFinished) continue;
+                activeGrainCount++;
                 
                 if (grain.envPos < 0) {
                     grain.envPos++;
@@ -327,12 +335,12 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                 float sampleLA = circularBuffer.read(0, indexA);
                 float sampleLB = circularBuffer.read(0, indexB);
                 float intrpL = sampleLA + fraction * (sampleLB - sampleLA);
-                outputL += (intrpL * envelope * grain.spreadL);
+                outputL += (intrpL * envelope * grain.spreadL * grain.amplitude);
 
                 float sampleRA = circularBuffer.read(1, indexA);
                 float sampleRB = circularBuffer.read(1, indexB);
                 float intrpR = sampleRA + fraction * (sampleRB - sampleRA);
-                outputR += (intrpR * envelope * grain.spreadR);
+                outputR += (intrpR * envelope * grain.spreadR * grain.amplitude);
                 
                 // Age the grain
                 grain.envPos++;
@@ -349,9 +357,7 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                             grain.isFinished = true;
                     }
                 }
-                        
             }
-            
             
             {
                 // SIGNAL CHAIN
@@ -369,11 +375,11 @@ void GrainProcessor::process(juce::AudioBuffer<float>& buffer)
                     outputR = processSoftClipper(outputR);
                 }
                 
-                outputL = limit(outputL);
-                outputR = limit(outputR);
-                
                 outputL = reverb.processSample(outputL, 0);
                 outputR = reverb.processSample(outputR, 1);
+                
+                outputL = limit(outputL);
+                outputR = limit(outputR);
             }
             
             float wet = mixerBlend[0].getTargetValue();
