@@ -6,7 +6,7 @@ Orbiter is a real-time granulator audio plugin built with [JUCE](https://juce.co
 
 ## What is a Granulator?
 
-A granulator is an audio plugin — a software component that runs inside a **Digital Audio Workstation (DAW)** such as Ableton Live, Avid Pro-Tools, or Logic Pro. It applies **granular synthesis** to any incoming audio signal in real time, slicing it into tiny fragments called grains and reassembling them to create new soundscapes.
+A granulator is an audio plugin — a software component that runs inside a Digital Audio Workstation **(DAW)** such as Ableton Live, Avid Pro-Tools, or Logic Pro. It applies granular synthesis to any incoming audio signal in real time, slicing it into tiny fragments called grains and reassembling them to create new soundscapes.
 
 ---
 
