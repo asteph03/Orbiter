@@ -36,6 +36,7 @@ struct Grain
     float playbackSpeed = 1.f;
     float spreadL, spreadR;
     int replayCount = 0;
+    float amplitude;
 };
 
 enum envelopeIndex
@@ -97,7 +98,7 @@ public:
     
     float processSoftClipper(float inputSample)
     {
-        auto wetSignal = inputSample * juce::Decibels::decibelsToGain(16.f);
+        auto wetSignal = inputSample * juce::Decibels::decibelsToGain(12.f);
         wetSignal = (2.0 / juce::MathConstants<float>::pi) * std::atan(wetSignal);
         wetSignal *= 2.0;
                 
@@ -106,7 +107,7 @@ public:
             wetSignal *= 1.0 / std::abs(wetSignal);
         }
             
-        wetSignal = wetSignal * juce::Decibels::decibelsToGain(-16.f);
+        wetSignal = wetSignal * juce::Decibels::decibelsToGain(-12.f);
         return wetSignal;
     }
     
