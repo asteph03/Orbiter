@@ -34,7 +34,7 @@ A granulator is an audio plugin — a software component that runs inside a Digi
 ## Requirements
 
 - Windows 10/11 (64-bit) or macOS 10.13+
-- A VST3 or AU compatible DAW
+- A .vst3 or .au compatible DAW (.aaxplugin format coming soon)
 - **Windows:** Visual Studio 2022 with the "Desktop development with C++" workload
 - **macOS:** Xcode 13 or later
 
