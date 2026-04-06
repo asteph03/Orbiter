@@ -49,11 +49,6 @@ public:
             mix.setTargetValue(0.75f * mixVal);
     }
     
-    void oscillateTankDelays()
-    {
-        
-    }
-    
     void reset()
     {
         ap1.reset();
