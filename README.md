@@ -43,5 +43,3 @@ A granulator is an audio plugin — a software component that runs inside a Digi
 ## About
 
 Developed by Aidan Stephenson as a senior design project at the University of Cincinnati.
-
-Feel free to reach out at aidansteph03@gmail.com with any questions.
